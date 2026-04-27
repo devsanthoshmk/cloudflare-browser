@@ -57,15 +57,6 @@ npx wrangler dev
 
 Once it's ready, you can test it with `curl`:
 
-**Local `curl` Test:**
-```bash
-# Basic query
-curl -s "http://localhost:8787/?q=cloudflare+workers"
-
-# Query with pagination and max limits
-curl -s "http://localhost:8787/?q=duckduckgo&pages=2&max=10"
-```
-
 ## Deployment
 
 Deploy your worker to production using:
@@ -106,6 +97,34 @@ curl -s "https://google-search-worker.sanpro.workers.dev/?q=query+here"
     "zeroClick": null,
     "pagesScraped": 1,
     "query": "cloudflare workers"
+  }
+}
+```
+
+### Example Image Search JSON Response Format (`/images`)
+
+```json
+{
+  "query": "dogs",
+  "features_exposed": [
+    "image",
+    "thumbnail",
+    "title",
+    "source",
+    "url"
+  ],
+  "data": {
+    "results": [
+      {
+        "image": "https://example.com/raw-hd-image.jpg",
+        "thumbnail": "https://tse2.mm.bing.net/th/id/OIP...",
+        "title": "Example dog picture",
+        "url": "https://example.com/original-page-url",
+        "width": 1920,
+        "height": 1080,
+        "source": "Bing"
+      }
+    ]
   }
 }
 ```
