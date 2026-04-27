@@ -1,0 +1,18 @@
+# Cloudflare-specific
+.dev.vars
+.wrangler/
+dist/
+worker-bundle.js
+
+# Dependencies
+node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# OS/Editor
+.DS_Store
+.vscode/
+.idea/
