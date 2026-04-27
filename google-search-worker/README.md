@@ -70,7 +70,7 @@ Once deployed, access the automation API by utilizing the production URL provide
 
 **Production `curl` Test:**
 ```bash
-curl -s "https://google-search-worker.sanpro.workers.dev/?q=query+here"
+curl -s "https://searchres.sanpro.workers.dev/?q=query+here"
 ```
 
 ### Example JSON Response Format

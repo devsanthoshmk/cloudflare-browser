@@ -3,8 +3,22 @@ import { imageSearch } from "@mudbill/duckduckgo-images-api";
 
 export interface Env {}
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,HEAD,POST,OPTIONS",
+  "Access-Control-Max-Age": "86400",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    // Handle CORS preflight requests
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        headers: corsHeaders,
+      });
+    }
+
     const url = new URL(request.url);
     const { searchParams, pathname } = url;
     
@@ -13,7 +27,10 @@ export default {
     if (!query) {
       return new Response(JSON.stringify({ error: "Missing 'q' query parameter" }), {
         status: 400,
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          ...corsHeaders,
+          "Content-Type": "application/json" 
+        },
       });
     }
 
@@ -26,15 +43,12 @@ export default {
           iterations: parseInt(searchParams.get("pages") || "1", 10)
         });
 
-        // The user specifically requested "only image url" so we ensure
-        // the client can easily extract just that, although we return
-        // the structure so they get width/height if needed.
         return new Response(JSON.stringify({ 
           query, 
           features_exposed: ["image", "thumbnail", "title", "source", "url"],
           data: {
             results: results.map(r => ({
-              image: r.image, // The direct image URL 
+              image: r.image,
               thumbnail: r.thumbnail,
               title: r.title,
               url: r.url,
@@ -44,7 +58,10 @@ export default {
             }))
           }
         }), {
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            ...corsHeaders,
+            "Content-Type": "application/json" 
+          },
         });
       }
 
@@ -64,12 +81,18 @@ export default {
         features_exposed: ["results", "zeroClick", "spelling", "pagesScraped"],
         data: results 
       }), {
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          ...corsHeaders,
+          "Content-Type": "application/json" 
+        },
       });
     } catch (e: any) {
       return new Response(JSON.stringify({ error: String(e), stack: e.stack }), {
         status: 500,
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          ...corsHeaders,
+          "Content-Type": "application/json" 
+        },
       });
     }
   },
