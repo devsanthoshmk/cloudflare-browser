@@ -1,13 +1,14 @@
-import { launch } from "@cloudflare/playwright";
+import { search } from "ddg-search";
+import { imageSearch } from "@mudbill/duckduckgo-images-api";
 
-export interface Env {
-  MYBROWSER: Fetcher;
-}
+export interface Env {}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    const query = url.searchParams.get("q");
+    const { searchParams, pathname } = url;
+    
+    const query = searchParams.get("q");
 
     if (!query) {
       return new Response(JSON.stringify({ error: "Missing 'q' query parameter" }), {
@@ -16,64 +17,60 @@ export default {
       });
     }
 
-    let browser;
     try {
-      browser = await launch(env.MYBROWSER);
-      const context = await browser.newContext({
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        viewport: { width: 1280, height: 720 }
-      });
-      const page = await context.newPage();
-      
-      // Go to search directly (DuckDuckGo used because Google explicitly blocks Cloudflare IPs with Captcha)
-      await page.goto(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`);
-      
-      try {
-        // Wait for search results container
-        await page.waitForSelector('.results', { timeout: 10000 });
-      } catch (e) {
-         const html = await page.content();
-         return new Response(JSON.stringify({ error: "Could not find results", html }), {
-           headers: { "Content-Type": "application/json" },
-         });
-      }
-      
-      // Extract results
-      const results = await page.evaluate(() => {
-        const items = document.querySelectorAll('.result');
-        const extracted: { title: string; link: string; snippet?: string }[] = [];
-        
-        items.forEach((item) => {
-          const titleEl = item.querySelector('.result__title a');
-          const snippetEl = item.querySelector('.result__snippet');
-          
-          if (titleEl) {
-             const link = titleEl.getAttribute('href') || '';
-             // DuckDuckGo html links look like //duckduckgo.com/l/?uddg=actual_url
-             // Let's just return the raw text link if parsing is hard, or duckduckgo's redirect
-            extracted.push({
-              title: titleEl.textContent?.trim() || '',
-              link: link,
-              snippet: snippetEl ? snippetEl.textContent?.trim() || '' : undefined
-            });
-          }
+      // Image Search Endpoint
+      if (pathname === "/images" || searchParams.get("type") === "image") {
+        const results = await imageSearch({
+          query,
+          safe: searchParams.get("safe") !== "false",
+          iterations: parseInt(searchParams.get("pages") || "1", 10)
         });
-        
-        return extracted;
-      });
 
-      return new Response(JSON.stringify({ query, results }), {
+        // The user specifically requested "only image url" so we ensure
+        // the client can easily extract just that, although we return
+        // the structure so they get width/height if needed.
+        return new Response(JSON.stringify({ 
+          query, 
+          features_exposed: ["image", "thumbnail", "title", "source", "url"],
+          data: {
+            results: results.map(r => ({
+              image: r.image, // The direct image URL 
+              thumbnail: r.thumbnail,
+              title: r.title,
+              url: r.url,
+              width: r.width,
+              height: r.height,
+              source: r.source
+            }))
+          }
+        }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      // Default Web Search Endpoint
+      const options = {
+        maxPages: parseInt(searchParams.get("pages") || "1", 10),
+        maxResults: searchParams.has("max") ? parseInt(searchParams.get("max")!, 10) : undefined,
+        region: searchParams.get("region") || "wt-wt",
+        time: searchParams.get("time") || "",
+        fetchImpl: fetch.bind(globalThis) // Use Workers native fetch
+      };
+
+      const results = await search(query, options);
+
+      return new Response(JSON.stringify({ 
+        query, 
+        features_exposed: ["results", "zeroClick", "spelling", "pagesScraped"],
+        data: results 
+      }), {
         headers: { "Content-Type": "application/json" },
       });
     } catch (e: any) {
-      return new Response(JSON.stringify({ error: String(e) }), {
+      return new Response(JSON.stringify({ error: String(e), stack: e.stack }), {
         status: 500,
         headers: { "Content-Type": "application/json" },
       });
-    } finally {
-      if (browser) {
-        await browser.close();
-      }
     }
   },
 } satisfies ExportedHandler<Env>;

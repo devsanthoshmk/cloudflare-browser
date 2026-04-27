@@ -1,12 +1,39 @@
-# Google Search Worker (via DuckDuckGo)
+# DuckDuckGo Search Worker
 
-This project is a Cloudflare Worker that uses [Cloudflare Browser Rendering API (Playwright)](#) to run a headless browser, navigate to a search engine, and extract search results natively. 
+This project is a very fast, serverless Cloudflare Worker that uses the `ddg-search` library to pull search results natively from DuckDuckGo without the overhead of headless browsers or Playwright. 
 
-> **Note on Google Search:** Because Google puts strict CAPTCHAs on automated traffic coming from Cloudflare's shared IPs, this scraper uses DuckDuckGo HTML search as a proxy for the search results. This ensures reliable uptime when hosted on Cloudflare Workers without getting blocked.
+By fetching search data via HTTP without spinning up a Chromium instance, we:
+- Save immense memory and CPU (much lower Workers execution time).
+- Never get blocked by IP CAPTCHAs that typically plague browser-based bots on Cloudflare IPs.
+- Avoid the `https.request` and Node.js stream overhead by using native Cloudflare `fetch()`.
 
-## Prerequisites
-- Node.js (v18+)
-- Cloudflare Account with Browser Rendering enabled
+## Features Exposed
+The API exposes all standard features supported by the library:
+
+### Web Search (`/` or `/search`)
+- **`q`**: The search query (e.g., `?q=hello+world`)
+- **`pages`**: The number of result pages to scrape (e.g., `?pages=2`)
+- **`max`**: Optional maximum total number of results to fetch (e.g., `?max=5`)
+- **`region`**: Search region filter (e.g., `?region=en-US`, default: `wt-wt`)
+- **`time`**: Narrow by time (e.g., `?time=d` for past day, `w` for week, `m` for month)
+
+The JSON response exposes:
+- **`results`**: An array of fetched items with `title`, `url`, `description`, and `displayUrl`.
+- **`zeroClick`**: DuckDuckGo's instant answer cards / knowledge graphs (if applicable).
+- **`spelling`**: Any spelling corrections provided for your query. 
+- **`pagesScraped`**: The number of pagination pages it crawled.
+
+### Image Search (`/images`)
+- **`q`**: The image search keyword (e.g., `/images?q=dogs`)
+- **`safe`**: Safe search boolean filter (e.g. `?safe=false` for explicit content, true by default)
+- **`pages`**: How many iterations of 100 images to return (e.g., `?pages=2`)
+
+The JSON response for images exposes:
+- **`image`**: **The raw image URL.**
+- **`thumbnail`**: The DuckDuckGo thumbnail URL.
+- **`title`**: The page title.
+- **`url`**: The origin web URL.
+- **`width` / `height`**: The dimension of the full image.
 
 ## Project Setup
 
@@ -21,18 +48,22 @@ This project is a Cloudflare Worker that uses [Cloudflare Browser Rendering API 
 
 ## Running Locally
 
-Because it uses Cloudflare Browser Rendering bindings, **you must use the `--remote` flag** to test locally. The local `--remote` flag runs the worker on your machine but connects to an actual headless Chromium instance hosted in Cloudflare's network.
+Because we no longer rely on Browser Rendering, you can run the standard `dev` server blazing fast locally.
 
 Start the local development server:
 ```bash
-npx wrangler dev --remote
+npx wrangler dev
 ```
 
-Once it's ready (typically running on `http://localhost:8787`), you can test it with `curl`:
+Once it's ready, you can test it with `curl`:
 
 **Local `curl` Test:**
 ```bash
-curl -s "http://localhost:8787/?q=cloudflare+workers+playwright"
+# Basic query
+curl -s "http://localhost:8787/?q=cloudflare+workers"
+
+# Query with pagination and max limits
+curl -s "http://localhost:8787/?q=duckduckgo&pages=2&max=10"
 ```
 
 ## Deployment
@@ -44,27 +75,37 @@ npx wrangler deploy
 
 ## Production API Usage
 
-Once deployed, you can access the automation API by passing a `q` parameter to your worker's production URL.
+Once deployed, access the automation API by utilizing the production URL provided by Wrangler.
 
 **Production `curl` Test:**
 ```bash
-curl -s "https://google-search-worker.sanpro.workers.dev/?q=playwright+cloudflare+workers"
+curl -s "https://google-search-worker.sanpro.workers.dev/?q=query+here"
 ```
 
-### JSON Response Format
-
-The endpoint returns standard JSON formatted search results:
+### Example JSON Response Format
 
 ```json
 {
-  "query": "playwright cloudflare workers",
-  "results": [
-    {
-      "title": "Playwright · Cloudflare Browser Run docs",
-      "link": "//duckduckgo.com/l/?uddg=...",
-      "snippet": "Playwright is an open-source package developed by Microsoft that can do browser automation tasks..."
-    },
-    ...
-  ]
+  "query": "cloudflare workers",
+  "features_exposed": [
+    "results",
+    "zeroClick",
+    "spelling",
+    "pagesScraped"
+  ],
+  "data": {
+    "results": [
+      {
+        "title": "Cloudflare",
+        "url": "https://workers.cloudflare.com/",
+        "description": "Cloudflare is your AI Cloud with compute...",
+        "displayUrl": "workers.cloudflare.com"
+      }
+    ],
+    "spelling": null,
+    "zeroClick": null,
+    "pagesScraped": 1,
+    "query": "cloudflare workers"
+  }
 }
 ```
